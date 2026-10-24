@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 function BrandMark() {
   return (
@@ -21,23 +22,38 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [checking, setChecking] = useState(true);
 
-  // Check if already authenticated on mount
+  // On mount: redirect if already authenticated or setup is needed
   useEffect(() => {
-    async function checkAuth() {
+    async function checkStatus() {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated) {
-            router.push("/dashboard");
+        // 1. Already logged in?
+        const meRes = await fetch("/api/auth/me");
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.authenticated) {
+            router.replace("/dashboard");
+            return;
+          }
+        }
+
+        // 2. No admin created yet → go to first-time setup
+        const setupRes = await fetch("/api/auth/setup");
+        if (setupRes.ok) {
+          const setupData = await setupRes.json();
+          if (setupData.needsSetup) {
+            router.replace("/setup");
+            return;
           }
         }
       } catch {
-        // Not logged in, proceed to login form
+        // DB might be unreachable — show form anyway
+      } finally {
+        setChecking(false);
       }
     }
-    checkAuth();
+    checkStatus();
   }, [router]);
 
   async function handleLogin(e: FormEvent) {
@@ -51,7 +67,6 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
-
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -66,7 +81,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Successful login - redirect to employee dashboard
       router.push("/dashboard");
       router.refresh();
     } catch {
@@ -76,12 +90,25 @@ export default function LoginPage() {
     }
   }
 
-  function handleAutofill() {
-    setUsername("admin");
-    setPassword("admin123");
-    setErrorMessage("");
+  // ── Loading / redirect check ───────────────────────────────────────────────
+  if (checking) {
+    return (
+      <div className="login-page">
+        <div className="login-bg-glow" />
+        <div className="login-card" style={{ textAlign: "center", padding: "48px 32px" }}>
+          <div style={{
+            width: "40px", height: "40px", border: "3px solid #e2e8f0",
+            borderTopColor: "#6d28d9", borderRadius: "50%",
+            animation: "spin 0.8s linear infinite", margin: "0 auto 16px",
+          }} />
+          <p style={{ color: "#64748b", fontSize: "14px" }}>Verifying session…</p>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
   }
 
+  // ── Sign-in form ───────────────────────────────────────────────────────────
   return (
     <div className="login-page">
       <div className="login-bg-glow" />
@@ -98,7 +125,7 @@ export default function LoginPage() {
 
         <h1 className="login-title">Admin Sign In</h1>
         <p className="login-subtitle">
-          Authenticate with your SQL Server administrator credentials to manage organizational employee records.
+          Authenticate with your administrator credentials to manage employee records.
         </p>
 
         {/* Error Alert */}
@@ -135,7 +162,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
-                style={{ paddingRight: "40px" }}
+                style={{ paddingRight: "48px" }}
               />
               <button
                 type="button"
@@ -156,7 +183,7 @@ export default function LoginPage() {
             id="login-submit-btn"
           >
             {isLoading ? (
-              <span>Authenticating...</span>
+              <span>Authenticating…</span>
             ) : (
               <>
                 <span>Sign In to Dashboard</span>
@@ -166,21 +193,32 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Demo Credentials Callout */}
-        <div className="demo-credentials-box">
-          <div>
-            <strong>Default SQL Server Credentials:</strong>
-            <div style={{ marginTop: "2px", color: "#64748b" }}>
-              Username: <code>admin</code> &nbsp;|&nbsp; Password: <code>admin123</code>
-            </div>
-          </div>
-          <button type="button" className="autofill-btn" onClick={handleAutofill}>
-            Autofill
-          </button>
+        {/* First-time setup link */}
+        <div style={{
+          marginTop: "18px", padding: "12px 16px",
+          background: "#f8fafc", border: "1px solid #e2e8f0",
+          borderRadius: "10px", display: "flex",
+          alignItems: "center", justifyContent: "space-between", gap: "12px",
+        }}>
+          <span style={{ fontSize: "12px", color: "#64748b" }}>
+            No admin account yet?
+          </span>
+          <Link
+            href="/setup"
+            style={{
+              fontSize: "12px", fontWeight: 600,
+              color: "#6d28d9", textDecoration: "none",
+              padding: "4px 12px", border: "1px solid #ede9fe",
+              borderRadius: "6px", background: "#f5f3ff",
+              transition: "background 0.15s",
+            }}
+          >
+            First-Time Setup →
+          </Link>
         </div>
 
-        <div style={{ marginTop: "20px", textAlign: "center", fontSize: "11px", color: "#94a3b8" }}>
-          Protected by SQL Server Database Authentication (<code>dbo.AdminUser</code>)
+        <div style={{ marginTop: "16px", textAlign: "center", fontSize: "11px", color: "#94a3b8" }}>
+          Protected by SQL Server database authentication (<code>dbo.AdminUser</code>) with bcrypt hashing
         </div>
       </div>
     </div>

@@ -123,6 +123,18 @@ export default function EmployeeDashboard() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  // Account Settings Modal State
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [settingCurrentPwd, setSettingCurrentPwd] = useState("");
+  const [settingNewUsername, setSettingNewUsername] = useState("");
+  const [settingNewPwd, setSettingNewPwd] = useState("");
+  const [settingConfirmPwd, setSettingConfirmPwd] = useState("");
+  const [settingError, setSettingError] = useState("");
+  const [settingSuccess, setSettingSuccess] = useState("");
+  const [isSubmittingSettings, setIsSubmittingSettings] = useState(false);
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
+
   function showToastMessage(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -183,6 +195,74 @@ export default function EmployeeDashboard() {
     } finally {
       router.push("/login");
       router.refresh();
+    }
+  }
+
+  // Open Settings Modal
+  function handleOpenSettings() {
+    setSettingCurrentPwd("");
+    setSettingNewUsername("");
+    setSettingNewPwd("");
+    setSettingConfirmPwd("");
+    setSettingError("");
+    setSettingSuccess("");
+    setShowSettings(true);
+  }
+
+  // Save Admin Profile Changes
+  async function handleSaveProfile(e: FormEvent) {
+    e.preventDefault();
+    setSettingError("");
+    setSettingSuccess("");
+
+    if (!settingCurrentPwd) {
+      setSettingError("Current password is required.");
+      return;
+    }
+    if (settingNewPwd && settingNewPwd !== settingConfirmPwd) {
+      setSettingError("New password and confirm password do not match.");
+      return;
+    }
+    if (settingNewPwd && settingNewPwd.length < 6) {
+      setSettingError("New password must be at least 6 characters.");
+      return;
+    }
+    if (!settingNewUsername && !settingNewPwd) {
+      setSettingError("Enter a new username, new password, or both.");
+      return;
+    }
+
+    setIsSubmittingSettings(true);
+    try {
+      const res = await fetch("/api/admin/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: settingCurrentPwd,
+          newUsername: settingNewUsername.trim() || undefined,
+          newPassword: settingNewPwd || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setSettingError(data.error || "Failed to update profile.");
+        return;
+      }
+
+      setSettingSuccess("Profile updated successfully!");
+      if (data.usernameChanged && data.newUsername) {
+        setAdminUser(data.newUsername);
+      }
+      setSettingCurrentPwd("");
+      setSettingNewPwd("");
+      setSettingConfirmPwd("");
+      setSettingNewUsername("");
+      setTimeout(() => setShowSettings(false), 1200);
+    } catch {
+      setSettingError("Server connection error. Please try again.");
+    } finally {
+      setIsSubmittingSettings(false);
     }
   }
 
@@ -267,7 +347,10 @@ export default function EmployeeDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        setAddError(data.error || "Failed to add employee.");
+        const errorMsg = data.details
+          ? `${data.error} (${data.details})`
+          : (data.error || "Failed to add employee.");
+        setAddError(errorMsg);
         return;
       }
 
@@ -350,6 +433,127 @@ export default function EmployeeDashboard() {
         <div className="toast-notice" role="alert">
           <span style={{ color: "#4ade80" }}>✓</span>
           <span>{toast}</span>
+        </div>
+      )}
+
+      {/* ACCOUNT SETTINGS MODAL */}
+      {showSettings && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+          <div className="modal-dialog" style={{ maxWidth: "480px" }}>
+            <div className="modal-header" style={{ background: "linear-gradient(135deg,#1e1b4b,#312e81)", color: "#fff", borderRadius: "12px 12px 0 0" }}>
+              <h3 id="settings-dialog-title" style={{ color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1a1.8 1.8 0 0 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .9v.2a1.8 1.8 0 0 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.9l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.9-3h-.2a1.8 1.8 0 0 1 0-3.6h.2a1.8 1.8 0 0 0 .9-3l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.9v-.2a1.8 1.8 0 0 1 3.6 0v.2a1.8 1.8 0 0 0 3 .9l.1-.1a1.8 1.8 0 0 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .9 3h.2a1.8 1.8 0 0 1 0 3.6h-.2a1.8 1.8 0 0 0-.9 3Z"/></svg>
+                Account Settings
+              </h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowSettings(false)}
+                aria-label="Close settings"
+                style={{ color: "rgba(255,255,255,0.8)" }}
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveProfile}>
+              <div className="modal-body">
+                <div style={{ background: "#f0f4ff", border: "1px solid #c7d2fe", borderRadius: "8px", padding: "12px 16px", marginBottom: "18px", fontSize: "13px", color: "#3730a3" }}>
+                  <strong>Logged in as:</strong> {adminUser}
+                  <div style={{ marginTop: "4px", color: "#6366f1", fontSize: "12px" }}>Fill in only the fields you want to change.</div>
+                </div>
+
+                {settingError && <div className="error-message" style={{ marginBottom: "14px" }}>{settingError}</div>}
+                {settingSuccess && (
+                  <div style={{ background: "#dcfce7", border: "1px solid #86efac", borderRadius: "8px", padding: "10px 16px", marginBottom: "14px", color: "#15803d", fontWeight: 600, fontSize: "13px" }}>
+                    ✓ {settingSuccess}
+                  </div>
+                )}
+
+                <div className="field">
+                  <label htmlFor="settings-current-pwd">
+                    Current Password <span className="required-mark">*</span>
+                  </label>
+                  <div className="password-input-wrap">
+                    <input
+                      id="settings-current-pwd"
+                      type={showCurrentPwd ? "text" : "password"}
+                      placeholder="Enter your current password"
+                      value={settingCurrentPwd}
+                      onChange={(e) => setSettingCurrentPwd(e.target.value)}
+                      required
+                      autoComplete="current-password"
+                    />
+                    <button type="button" className="password-toggle-btn" onClick={() => setShowCurrentPwd(!showCurrentPwd)}>
+                      {showCurrentPwd ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="settings-new-username">New Username (leave blank to keep current)</label>
+                  <input
+                    id="settings-new-username"
+                    type="text"
+                    placeholder={`Current: ${adminUser}`}
+                    maxLength={100}
+                    value={settingNewUsername}
+                    onChange={(e) => setSettingNewUsername(e.target.value)}
+                    autoComplete="username"
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="settings-new-pwd">New Password (leave blank to keep current)</label>
+                  <div className="password-input-wrap">
+                    <input
+                      id="settings-new-pwd"
+                      type={showNewPwd ? "text" : "password"}
+                      placeholder="Min 6 characters"
+                      value={settingNewPwd}
+                      onChange={(e) => setSettingNewPwd(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                    <button type="button" className="password-toggle-btn" onClick={() => setShowNewPwd(!showNewPwd)}>
+                      {showNewPwd ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+
+                {settingNewPwd && (
+                  <div className="field">
+                    <label htmlFor="settings-confirm-pwd">Confirm New Password</label>
+                    <input
+                      id="settings-confirm-pwd"
+                      type="password"
+                      placeholder="Re-enter new password"
+                      value={settingConfirmPwd}
+                      onChange={(e) => setSettingConfirmPwd(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowSettings(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isSubmittingSettings}
+                  id="save-profile-btn"
+                  style={{ background: "linear-gradient(135deg,#4f46e5,#7c3aed)" }}
+                >
+                  {isSubmittingSettings ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -609,6 +813,17 @@ export default function EmployeeDashboard() {
               <span>System Administrator</span>
             </div>
           </div>
+          <button
+            type="button"
+            className="nav-link"
+            onClick={handleOpenSettings}
+            id="settings-btn"
+            style={{ border: "none", background: "none", width: "100%", textAlign: "left", cursor: "pointer", marginTop: "4px" }}
+            title="Account Settings"
+          >
+            <NavIcon name="settings" />
+            <span>Account Settings</span>
+          </button>
         </div>
       </aside>
 

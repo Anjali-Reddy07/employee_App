@@ -9,14 +9,26 @@ export default function RootPage() {
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated) {
+        // 1. Already authenticated?
+        const meRes = await fetch("/api/auth/me");
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.authenticated) {
             router.replace("/dashboard");
             return;
           }
         }
+
+        // 2. First-time setup needed?
+        const setupRes = await fetch("/api/auth/setup");
+        if (setupRes.ok) {
+          const setupData = await setupRes.json();
+          if (setupData.needsSetup) {
+            router.replace("/setup");
+            return;
+          }
+        }
+
         router.replace("/login");
       } catch {
         router.replace("/login");
