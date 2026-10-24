@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import sql from "mssql/msnodesqlv8";
+import sql from "mssql";
 import bcrypt from "bcryptjs";
 import { getSqlPool } from "@/app/lib/sql-server";
 

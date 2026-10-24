@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import sql from "mssql/msnodesqlv8";
+import sql from "mssql";
 import { getSqlPool } from "@/app/lib/sql-server";
 import { sendEmployeeNotification, type EmployeeSnapshot } from "@/app/lib/email";
 

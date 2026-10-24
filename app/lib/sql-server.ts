@@ -1,20 +1,23 @@
-import sql from "mssql/msnodesqlv8";
+import sql from "mssql";
 
 // ─── SQL Server Configuration ──────────────────────────────────────────────────
-const server = process.env.SQL_SERVER || "localhost\\SQLEXPRESS";
+// Uses SQL Server authentication (username + password) for cross-platform
+// compatibility (Linux/Vercel). Set these env vars in your Vercel dashboard.
+const server   = process.env.SQL_SERVER   || "localhost";
 const database = process.env.SQL_DATABASE || "employee_db";
-const driver = process.env.SQL_DRIVER || "ODBC Driver 18 for SQL Server";
-const encrypt = process.env.SQL_ENCRYPT === "true";
+const user     = process.env.SQL_USER     || "";
+const password = process.env.SQL_PASSWORD || "";
+const encrypt  = process.env.SQL_ENCRYPT  !== "false"; // default true for Azure/cloud
 
 export const connectionConfig: sql.config = {
   server,
   database,
-  driver,
+  user,
+  password,
   connectionTimeout: 15000, // 15 seconds connection timeout
   requestTimeout: 15000,    // 15 seconds query timeout
   options: {
-    trustedConnection: true,
-    trustServerCertificate: true,
+    trustServerCertificate: true, // allow self-signed certs
     encrypt,
     enableArithAbort: true,
   },
