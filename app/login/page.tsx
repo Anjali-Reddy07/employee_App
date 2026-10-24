@@ -218,7 +218,7 @@ export default function LoginPage() {
         </div>
 
         <div style={{ marginTop: "16px", textAlign: "center", fontSize: "11px", color: "#94a3b8" }}>
-          Protected by SQL Server database authentication (<code>dbo.AdminUser</code>) with bcrypt hashing
+          Protected by PostgreSQL database authentication (<code>admin_user</code>) with bcrypt hashing
         </div>
       </div>
     </div>

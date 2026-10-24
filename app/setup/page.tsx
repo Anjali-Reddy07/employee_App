@@ -152,7 +152,7 @@ export default function SetupPage() {
       setStep("done");
       setTimeout(() => router.replace("/dashboard"), 2000);
     } catch {
-      setErrorMessage("Unable to reach database. Ensure SQL Server is running.");
+      setErrorMessage("Unable to reach database. Please check your connection.");
     } finally {
       setIsLoading(false);
     }

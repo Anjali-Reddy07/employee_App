@@ -117,10 +117,10 @@ export default function EmployeesGridPage() {
       const data = await response.json();
       setEmployees(Array.isArray(data.employees) ? data.employees : []);
       if (isManualRefresh) {
-        showToast("Employee records refreshed from SQL Server");
+        showToast("Employee records refreshed from Neon PostgreSQL");
       }
     } catch {
-      setErrorMessage("Could not connect to SQL Server database. Please verify your connection.");
+      setErrorMessage("Could not connect to database. Please verify your connection.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -188,7 +188,7 @@ export default function EmployeesGridPage() {
       closeEditModal();
       showToast(`Employee "${editName.trim()}" updated successfully!`);
     } catch {
-      setModalError("Unable to connect to SQL Server. Check your connection.");
+      setModalError("Unable to connect to database. Check your connection.");
     } finally {
       setIsSavingEdit(false);
     }
@@ -415,7 +415,7 @@ export default function EmployeesGridPage() {
               </Link>
               <h1>Employee Directory</h1>
               <p className="page-description">
-                Showing live records fetched directly from the SQL Server database (<code>employee_db.dbo.Employee</code>).
+                Showing live records fetched directly from the Neon PostgreSQL database (<code>employee</code>).
               </p>
             </div>
             <div className="heading-actions-wrap">
@@ -432,7 +432,7 @@ export default function EmployeesGridPage() {
           <div className="stats-bar">
             <div className="stat-pill db-status">
               <span className="status-dot" aria-hidden="true" />
-              <span>SQL Server Connected</span>
+              <span>Neon PostgreSQL Connected</span>
             </div>
             <div className="stat-pill">
               <span>Total Employees:</span>
@@ -831,7 +831,7 @@ export default function EmployeesGridPage() {
           )}
 
           <footer className="page-footer">
-            People <span>·</span> Making work, work better. Connected to SQL Server <code>employee_db.dbo.Employee</code>.
+            People <span>·</span> Making work, work better. Connected to Neon PostgreSQL <code>employee</code>.
           </footer>
         </div>
       </main>

@@ -164,7 +164,7 @@ export default function EmployeeDashboard() {
     loadEmployees();
   }, [router]);
 
-  // Load Employees from SQL Server
+  // Load Employees from Neon PostgreSQL
   async function loadEmployees(isManual = false) {
     if (isManual) setRefreshing(true);
     else setLoading(true);
@@ -178,10 +178,10 @@ export default function EmployeeDashboard() {
       const data = await response.json();
       setEmployees(Array.isArray(data.employees) ? data.employees : []);
       if (isManual) {
-        showToastMessage("Data reloaded from SQL Server");
+        showToastMessage("Data reloaded from Neon PostgreSQL");
       }
     } catch {
-      setErrorMessage("Could not connect to SQL Server database. Please ensure the server is active.");
+      setErrorMessage("Could not connect to database. Please check your connection.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -364,7 +364,7 @@ export default function EmployeeDashboard() {
       setShowAddModal(false);
       loadEmployees();
     } catch {
-      setAddError("Failed to reach SQL Server database.");
+      setAddError("Failed to reach database.");
     } finally {
       setIsSubmittingAdd(false);
     }
@@ -372,7 +372,7 @@ export default function EmployeeDashboard() {
 
   // Delete Employee (DELETE request)
   async function handleDelete(id: number, name: string) {
-    const confirmed = window.confirm(`Are you sure you want to delete employee "${name}" (ID #${id}) from SQL Server?`);
+    const confirmed = window.confirm(`Are you sure you want to delete employee "${name}" (ID #${id})?`);
     if (!confirmed) return;
 
     setDeletingId(id);
@@ -654,7 +654,7 @@ export default function EmployeeDashboard() {
                   className="btn-primary"
                   disabled={isSubmittingAdd}
                 >
-                  {isSubmittingAdd ? "Saving to SQL Server..." : "Add Employee"}
+                  {isSubmittingAdd ? "Saving..." : "Add Employee"}
                 </button>
               </div>
             </form>
@@ -710,7 +710,7 @@ export default function EmployeeDashboard() {
                     value={editSalary}
                     onChange={(e) => setEditSalary(e.target.value)}
                   />
-                  <span className="field-hint">Update employee salary in SQL Server database.</span>
+                  <span className="field-hint">Update employee salary in database.</span>
                 </div>
 
                 <div className="field">
@@ -760,7 +760,7 @@ export default function EmployeeDashboard() {
                   className="btn-primary"
                   disabled={isSubmittingEdit}
                 >
-                  {isSubmittingEdit ? "Updating SQL Server..." : "Save Changes"}
+                  {isSubmittingEdit ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -876,7 +876,7 @@ export default function EmployeeDashboard() {
             <div>
               <h1>Employee Management Dashboard</h1>
               <p className="page-description">
-                Real-time CRUD operations connected directly to SQL Server database (<code>employee_db.dbo.Employee</code>).
+                Real-time CRUD operations connected directly to Neon PostgreSQL database (<code>employee</code>).
               </p>
             </div>
             <div className="heading-actions-wrap">
@@ -897,7 +897,7 @@ export default function EmployeeDashboard() {
               <div className="kpi-card-content">
                 <span className="kpi-label">Total Employees</span>
                 <span className="kpi-value">{stats.total}</span>
-                <span className="kpi-sub">Registered in SQL Server</span>
+                <span className="kpi-sub">Registered in database</span>
               </div>
               <div className="kpi-icon purple">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1072,7 +1072,7 @@ export default function EmployeeDashboard() {
                 </svg>
               </div>
               <h3>No Employees Registered in Database</h3>
-              <p>Your SQL Server database currently has no employee records. Click below to add the first employee.</p>
+              <p>Your database currently has no employee records. Click below to add the first employee.</p>
               <button
                 type="button"
                 className="btn-primary"
@@ -1182,7 +1182,7 @@ export default function EmployeeDashboard() {
                                 type="button"
                                 className="delete-btn"
                                 onClick={() => handleDelete(emp.employee_id, emp.name)}
-                                title={`Delete ${emp.name} from SQL Server`}
+                                title={`Delete ${emp.name}`}
                                 disabled={deletingId === emp.employee_id}
                                 id={`delete-btn-${emp.employee_id}`}
                               >
@@ -1312,7 +1312,7 @@ export default function EmployeeDashboard() {
           )}
 
           <footer className="page-footer">
-            Admin Employee Dashboard <span>·</span> Connected to SQL Server <code>employee_db.dbo.Employee</code> & <code>dbo.AdminUser</code>.
+            Admin Employee Dashboard <span>·</span> Connected to Neon PostgreSQL <code>employee</code> & <code>admin_user</code>.
           </footer>
         </div>
       </main>
