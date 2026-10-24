@@ -102,7 +102,7 @@ export async function getSqlPool(): Promise<sql.ConnectionPool> {
   }
 
   // 3. Initiate a new connection pool
-  console.log(`[SQL Server] Establishing connection pool to '${server}' (Database: '${database}', Driver: '${driver}')...`);
+  console.log(`[SQL Server] Establishing connection pool to '${server}' (Database: '${database}')...`);
 
   connectingPromise = (async () => {
     try {
@@ -130,7 +130,6 @@ export async function getSqlPool(): Promise<sql.ConnectionPool> {
       console.error("[SQL Server] ✗ Connection failed:", {
         server,
         database,
-        driver,
         message: error.message || String(err),
         code: error.code,
         number: error.number,
