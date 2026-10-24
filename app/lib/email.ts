@@ -263,48 +263,45 @@ function createTransporter() {
  * blocks database responses. Wrapped in try/catch to guarantee that database
  * operations succeed even if email delivery encounters network or SMTP issues.
  */
-export function sendEmployeeNotification(payload: EmployeeNotificationPayload): void {
-  // Execute in background via unawaited async IIFE with full try/catch
-  (async () => {
-    try {
-      const transporter = createTransporter();
+export async function sendEmployeeNotification(payload: EmployeeNotificationPayload): Promise<void> {
+  try {
+    const transporter = createTransporter();
 
-      if (!transporter) {
-        console.warn(
-          "[Email] EMAIL_USER or EMAIL_PASS not set in environment (.env.local). Skipping email dispatch."
-        );
-        return;
-      }
-
-      // Dynamically resolve recipient address:
-      // Priority: ADMIN_EMAIL -> EMAIL_TO -> fallback
-      const recipient =
-        process.env.ADMIN_EMAIL ||
-        process.env.EMAIL_TO ||
-        "kanjalireddy29@gmail.com";
-
-      const { action, current } = payload;
-      // Exact subject line requirement:
-      // Subject: [Action Alert] Employee [Added / Updated / Deleted]: [Employee Name]
-      const subject = `[Action Alert] Employee ${action}: ${fmt(current.name)}`;
-
-      await transporter.sendMail({
-        from: `"Employee Management Portal" <${process.env.EMAIL_USER}>`,
-        to: recipient,
-        subject,
-        text: buildPlainTextEmail(payload),
-        html: buildHtmlEmail(payload),
-      });
-
-      console.log(
-        `[Email] ✓ Notification sent successfully to <${recipient}> for action '${action}' on employee #${current.employeeId}.`
+    if (!transporter) {
+      console.warn(
+        "[Email] EMAIL_USER or EMAIL_PASS not set in environment (.env.local). Skipping email dispatch."
       );
-    } catch (err: unknown) {
-      // Catch any SMTP / network error so calling route remains unharmed
-      console.error(
-        `[Email] ✗ Error delivering '${payload.action}' notification:`,
-        err instanceof Error ? err.message : String(err)
-      );
+      return;
     }
-  })();
+
+    // Dynamically resolve recipient address:
+    // Priority: ADMIN_EMAIL -> EMAIL_TO -> fallback
+    const recipient =
+      process.env.ADMIN_EMAIL ||
+      process.env.EMAIL_TO ||
+      "kanjalireddy29@gmail.com";
+
+    const { action, current } = payload;
+    // Exact subject line requirement:
+    // Subject: [Action Alert] Employee [Added / Updated / Deleted]: [Employee Name]
+    const subject = `[Action Alert] Employee ${action}: ${fmt(current.name)}`;
+
+    await transporter.sendMail({
+      from: `"Employee Management Portal" <${process.env.EMAIL_USER}>`,
+      to: recipient,
+      subject,
+      text: buildPlainTextEmail(payload),
+      html: buildHtmlEmail(payload),
+    });
+
+    console.log(
+      `[Email] ✓ Notification sent successfully to <${recipient}> for action '${action}' on employee #${current.employeeId}.`
+    );
+  } catch (err: unknown) {
+    // Catch any SMTP / network error so calling route remains unharmed
+    console.error(
+      `[Email] ✗ Error delivering '${payload.action}' notification:`,
+      err instanceof Error ? err.message : String(err)
+    );
+  }
 }

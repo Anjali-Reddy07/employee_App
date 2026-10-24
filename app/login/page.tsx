@@ -84,7 +84,7 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } catch {
-      setErrorMessage("Unable to connect to database. Ensure SQL Server is running.");
+      setErrorMessage("Unable to connect to database. Please check your connection.");
     } finally {
       setIsLoading(false);
     }

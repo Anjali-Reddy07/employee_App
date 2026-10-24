@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import sql from "mssql";
-import { getSqlPool } from "@/app/lib/sql-server";
+import { query, initDb } from "@/app/lib/db";
 import { sendEmployeeNotification, type EmployeeSnapshot } from "@/app/lib/email";
 
 export const runtime = "nodejs";
+
+// ─── Row Types ────────────────────────────────────────────────────────────────
+interface EmployeeRow {
+  employee_id:  number;
+  name:         string;
+  email_id:     string | null;
+  phone_number: string | null;
+  address:      string | null;
+  salary:       number | null;
+  [key: string]: unknown;
+}
 
 // ─── Auth helper ──────────────────────────────────────────────────────────────
 async function getAdminUser(): Promise<string> {
@@ -19,26 +29,18 @@ async function getAdminUser(): Promise<string> {
 // ─── GET – list all employees ─────────────────────────────────────────────────
 export async function GET() {
   try {
-    const pool = await getSqlPool();
-
-    const result = await pool.request().query(`
-      SELECT
-        employee_id,
-        name,
-        email_id,
-        phone_number,
-        address,
-        salary
-      FROM dbo.Employee
+    await initDb();
+    const result = await query(`
+      SELECT employee_id, name, email_id, phone_number, address, salary
+      FROM employee
       ORDER BY employee_id DESC;
     `);
-
-    return NextResponse.json({ employees: result.recordset });
+    return NextResponse.json({ employees: result.rows });
   } catch (error) {
-    console.error("Failed to fetch employees from SQL Server.", error);
+    console.error("Failed to fetch employees from Neon.", error);
     return NextResponse.json(
-      { error: "Unable to fetch employees. Verify SQL Server is running and the app has access to employee_db." },
-      { status: 500 },
+      { error: "Unable to fetch employees. Verify your DATABASE_URL is set correctly." },
+      { status: 500 }
     );
   }
 }
@@ -52,31 +54,29 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Valid employee ID is required." }, { status: 400 });
     }
 
-    const pool = await getSqlPool();
+    await initDb();
 
     // Fetch full record before deleting so the email has all details
-    const fetchResult = await pool
-      .request()
-      .input("id", sql.Int, Number(id))
-      .query(`
-        SELECT employee_id, name, email_id, phone_number, address, salary
-        FROM dbo.Employee WHERE employee_id = @id;
-      `);
+    const fetchResult = await query<EmployeeRow>(
+      `SELECT employee_id, name, email_id, phone_number, address, salary
+       FROM employee WHERE employee_id = $1;`,
+      [Number(id)]
+    );
 
-    const record = fetchResult.recordset[0];
+    const record = fetchResult.rows[0];
     if (!record) {
       return NextResponse.json({ error: "Employee not found." }, { status: 404 });
     }
 
-    const result = await pool
-      .request()
-      .input("id", sql.Int, Number(id))
-      .query(`DELETE FROM dbo.Employee WHERE employee_id = @id;`);
+    const deleteResult = await query(
+      `DELETE FROM employee WHERE employee_id = $1;`,
+      [Number(id)]
+    );
 
     const performedBy = await getAdminUser();
 
-    // Fire-and-forget email notification
-    sendEmployeeNotification({
+    // Email notification
+    await sendEmployeeNotification({
       action: "Deleted",
       performedBy,
       current: {
@@ -92,10 +92,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({
       success: true,
       deletedId: Number(id),
-      rowsAffected: result.rowsAffected[0],
+      rowsAffected: deleteResult.rowCount ?? 0,
     });
   } catch (error) {
-    console.error("Failed to delete employee from SQL Server.", error);
+    console.error("Failed to delete employee from Neon.", error);
     return NextResponse.json({ error: "Failed to delete employee record." }, { status: 500 });
   }
 }
@@ -143,18 +143,16 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const pool = await getSqlPool();
+    await initDb();
 
-    // ── Snapshot BEFORE values for the diff email ──────────────────────────
-    const beforeResult = await pool
-      .request()
-      .input("id", sql.Int, employeeId)
-      .query(`
-        SELECT employee_id, name, email_id, phone_number, address, salary
-        FROM dbo.Employee WHERE employee_id = @id;
-      `);
+    // Snapshot BEFORE values for the diff email
+    const beforeResult = await query<EmployeeRow>(
+      `SELECT employee_id, name, email_id, phone_number, address, salary
+       FROM employee WHERE employee_id = $1;`,
+      [employeeId]
+    );
 
-    const beforeRecord = beforeResult.recordset[0];
+    const beforeRecord = beforeResult.rows[0];
     if (!beforeRecord) {
       return NextResponse.json({ error: "Employee record not found." }, { status: 404 });
     }
@@ -168,33 +166,26 @@ export async function PUT(request: Request) {
       salary:     beforeRecord.salary,
     };
 
-    // ── Perform the UPDATE ─────────────────────────────────────────────────
-    const result = await pool
-      .request()
-      .input("id",      sql.Int,            employeeId)
-      .input("name",    sql.NVarChar(100),  name)
-      .input("email",   sql.NVarChar(150),  email   || null)
-      .input("phone",   sql.NVarChar(15),   phone   || null)
-      .input("address", sql.NVarChar(255),  address || null)
-      .input("salary",  sql.Decimal(18, 2), salary)
-      .query(`
-        UPDATE dbo.Employee
-        SET name         = @name,
-            email_id     = @email,
-            phone_number = @phone,
-            address      = @address,
-            salary       = @salary
-        WHERE employee_id = @id;
-      `);
+    // Perform the UPDATE
+    const result = await query(
+      `UPDATE employee
+       SET name         = $1,
+           email_id     = $2,
+           phone_number = $3,
+           address      = $4,
+           salary       = $5
+       WHERE employee_id = $6;`,
+      [name, email || null, phone || null, address || null, salary, employeeId]
+    );
 
-    if (result.rowsAffected[0] === 0) {
+    if ((result.rowCount ?? 0) === 0) {
       return NextResponse.json({ error: "Employee record not found." }, { status: 404 });
     }
 
     const performedBy = await getAdminUser();
 
-    // Fire-and-forget email notification with full diff
-    sendEmployeeNotification({
+    // Email notification with full diff
+    await sendEmployeeNotification({
       action: "Updated",
       performedBy,
       previous: previousSnapshot,
@@ -203,10 +194,10 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true, employeeId });
   } catch (error) {
-    console.error("Failed to update employee in SQL Server.", error);
+    console.error("Failed to update employee in Neon.", error);
     return NextResponse.json(
-      { error: "Unable to update employee. Verify SQL Server is running and the app has access to employee_db." },
-      { status: 500 },
+      { error: "Unable to update employee. Verify your DATABASE_URL is set correctly." },
+      { status: 500 }
     );
   }
 }
@@ -252,29 +243,22 @@ export async function POST(request: Request) {
   console.log(`[Employee API] Received 'Add Employee' request:`, { name, email, phone, salary });
 
   try {
-    const pool = await getSqlPool();
+    await initDb();
 
-    console.log(`[Employee API] Executing INSERT into dbo.Employee for '${name}'...`);
-    const result = await pool
-      .request()
-      .input("name",    sql.NVarChar(100),  name)
-      .input("email",   sql.NVarChar(150),  email   || null)
-      .input("phone",   sql.NVarChar(15),   phone   || null)
-      .input("address", sql.NVarChar(255),  address || null)
-      .input("salary",  sql.Decimal(18, 2), salary)
-      .query(`
-        INSERT INTO dbo.Employee (name, email_id, phone_number, address, salary)
-        OUTPUT INSERTED.employee_id
-        VALUES (@name, @email, @phone, @address, @salary);
-      `);
+    const result = await query<{ employee_id: number }>(
+      `INSERT INTO employee (name, email_id, phone_number, address, salary)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING employee_id;`,
+      [name, email || null, phone || null, address || null, salary]
+    );
 
-    const newEmployeeId: number = result.recordset[0].employee_id;
+    const newEmployeeId: number = result.rows[0].employee_id;
     console.log(`[Employee API] ✓ Employee created successfully with ID #${newEmployeeId}.`);
 
     const performedBy = await getAdminUser();
 
-    // Fire-and-forget email notification
-    sendEmployeeNotification({
+    // Email notification
+    await sendEmployeeNotification({
       action: "Added",
       performedBy,
       current: { employeeId: newEmployeeId, name, email, phone, address, salary },
@@ -282,28 +266,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ employeeId: newEmployeeId }, { status: 201 });
   } catch (error: unknown) {
-    const err = error as Error & { code?: string; number?: number; state?: string };
-    const isConnError = !err.number && (err.code === "ESOCKET" || err.code === "ETIMEOUT" || err.message?.includes("connection") || err.message?.includes("login"));
-
-    console.error(`[Employee API] ✗ FAILED to save employee '${name}' to SQL Server:`, {
-      type: isConnError ? "Database Connection Failure" : "Database Query Execution Failure",
-      message: err.message || String(error),
-      code: err.code,
-      sqlErrorNumber: err.number,
-      sqlState: err.state,
-      stack: err.stack,
-    });
-
+    const err = error as Error & { code?: string };
+    console.error(`[Employee API] ✗ FAILED to save employee '${name}' to Neon:`, err);
     return NextResponse.json(
       {
-        error: "Unable to save employee. Verify SQL Server is running and the app has access to employee_db.",
+        error: "Unable to save employee. Verify your DATABASE_URL is set correctly.",
         details: err.message || "Unknown database error",
         code: err.code || "DB_ERROR",
-        hint: isConnError
-          ? "Check that SQL Server (SQLEXPRESS) service is running and employee_db database exists."
-          : "Check table schema and column data types.",
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

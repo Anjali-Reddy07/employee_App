@@ -943,7 +943,7 @@ export default function EmployeeDashboard() {
                 <span className="kpi-value" style={{ fontSize: "18px", color: "#16a34a" }}>Active</span>
                 <span className="kpi-sub" style={{ color: "#15803d" }}>
                   <span className="status-dot" aria-hidden="true" style={{ width: "6px", height: "6px" }} />
-                  SQLEXPRESS Connected
+                  Neon PostgreSQL Connected
                 </span>
               </div>
               <div className="kpi-icon amber">

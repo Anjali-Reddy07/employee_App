@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import sql from "mssql";
 import bcrypt from "bcryptjs";
-import { getSqlPool } from "@/app/lib/sql-server";
+import { query, initDb } from "@/app/lib/db";
 
 export const runtime = "nodejs";
 
@@ -11,16 +10,13 @@ export const runtime = "nodejs";
 // ---------------------------------------------------------------------------
 export async function GET() {
   try {
-    const pool = await getSqlPool();
-    const result = await pool
-      .request()
-      .query(`SELECT COUNT(*) AS total FROM dbo.AdminUser;`);
-
-    const total: number = result.recordset[0]?.total ?? 0;
+    await initDb();
+    const result = await query<{ total: number }>(`SELECT COUNT(*)::int AS total FROM admin_user;`);
+    const total = Number(result.rows[0]?.total ?? 0);
     return NextResponse.json({ needsSetup: total === 0 });
   } catch (error) {
     console.error("[Setup] GET error:", error);
-    return NextResponse.json({ error: "Database error. Verify SQL Server is running." }, { status: 500 });
+    return NextResponse.json({ error: "Database error. Verify your DATABASE_URL is set correctly." }, { status: 500 });
   }
 }
 
@@ -62,14 +58,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const pool = await getSqlPool();
+    await initDb();
 
     // Guard: only allow setup if no admin exists yet
-    const countResult = await pool
-      .request()
-      .query(`SELECT COUNT(*) AS total FROM dbo.AdminUser;`);
-
-    const total: number = countResult.recordset[0]?.total ?? 0;
+    const countResult = await query<{ total: number }>(`SELECT COUNT(*)::int AS total FROM admin_user;`);
+    const total = Number(countResult.rows[0]?.total ?? 0);
     if (total > 0) {
       return NextResponse.json(
         { error: "Setup is already complete. An admin account already exists." },
@@ -81,17 +74,14 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Insert the new admin
-    const insertResult = await pool
-      .request()
-      .input("username", sql.NVarChar(100), username)
-      .input("password", sql.NVarChar(255), passwordHash)
-      .query(`
-        INSERT INTO dbo.AdminUser (username, password)
-        OUTPUT INSERTED.admin_id, INSERTED.username, INSERTED.created_at
-        VALUES (@username, @password);
-      `);
+    const insertResult = await query<{ admin_id: number; username: string; created_at: string }>(
+      `INSERT INTO admin_user (username, password)
+       VALUES ($1, $2)
+       RETURNING admin_id, username, created_at;`,
+      [username, passwordHash]
+    );
 
-    const newAdmin = insertResult.recordset[0];
+    const newAdmin = insertResult.rows[0];
     console.log(`[Setup] First admin account created: '${newAdmin.username}' (ID #${newAdmin.admin_id})`);
 
     // Auto sign-in: set auth cookies immediately after setup

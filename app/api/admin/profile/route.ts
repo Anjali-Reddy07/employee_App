@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import sql from "mssql";
 import bcrypt from "bcryptjs";
-import { getSqlPool } from "@/app/lib/sql-server";
+import { query, initDb } from "@/app/lib/db";
 
 export const runtime = "nodejs";
 
@@ -27,17 +26,17 @@ export async function GET() {
   }
 
   try {
-    const pool = await getSqlPool();
-    const result = await pool
-      .request()
-      .input("username", sql.NVarChar(100), username)
-      .query(`SELECT admin_id, username, created_at FROM dbo.AdminUser WHERE username = @username;`);
+    await initDb();
+    const result = await query<{ admin_id: number; username: string; created_at: string }>(
+      `SELECT admin_id, username, created_at FROM admin_user WHERE username = $1;`,
+      [username]
+    );
 
-    if (!result.recordset[0]) {
+    if (!result.rows[0]) {
       return NextResponse.json({ error: "Admin account not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ admin: result.recordset[0] });
+    return NextResponse.json({ admin: result.rows[0] });
   } catch (error) {
     console.error("[Admin Profile] GET error:", error);
     return NextResponse.json({ error: "Database error." }, { status: 500 });
@@ -65,9 +64,9 @@ export async function PUT(request: Request) {
   }
 
   const data = body as Record<string, unknown>;
-  const newUsername = typeof data.newUsername === "string" ? data.newUsername.trim() : "";
-  const currentPassword = typeof data.currentPassword === "string" ? data.currentPassword : "";
-  const newPassword = typeof data.newPassword === "string" ? data.newPassword : "";
+  const newUsername     = typeof data.newUsername     === "string" ? data.newUsername.trim() : "";
+  const currentPassword = typeof data.currentPassword === "string" ? data.currentPassword    : "";
+  const newPassword     = typeof data.newPassword     === "string" ? data.newPassword        : "";
 
   if (!currentPassword) {
     return NextResponse.json({ error: "Current password is required to make changes." }, { status: 400 });
@@ -80,15 +79,15 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const pool = await getSqlPool();
+    await initDb();
 
     // Verify current password
-    const fetchResult = await pool
-      .request()
-      .input("username", sql.NVarChar(100), currentUsername)
-      .query(`SELECT admin_id, password FROM dbo.AdminUser WHERE username = @username;`);
+    const fetchResult = await query<{ admin_id: number; password: string }>(
+      `SELECT admin_id, password FROM admin_user WHERE username = $1;`,
+      [currentUsername]
+    );
 
-    const admin = fetchResult.recordset[0];
+    const admin = fetchResult.rows[0];
     if (!admin) {
       return NextResponse.json({ error: "Admin account not found." }, { status: 404 });
     }
@@ -104,32 +103,28 @@ export async function PUT(request: Request) {
     }
 
     // Determine final values
-    const finalUsername = newUsername || currentUsername;
+    const finalUsername     = newUsername || currentUsername;
     const finalPasswordHash = newPassword
       ? await bcrypt.hash(newPassword, 12)
       : storedPwd.startsWith("$2") ? storedPwd : await bcrypt.hash(storedPwd, 12);
 
     // Check if new username conflicts with another account
     if (finalUsername !== currentUsername) {
-      const conflict = await pool
-        .request()
-        .input("newUsername", sql.NVarChar(100), finalUsername)
-        .query(`SELECT 1 FROM dbo.AdminUser WHERE username = @newUsername;`);
-      if (conflict.recordset.length > 0) {
+      const conflict = await query(
+        `SELECT 1 FROM admin_user WHERE username = $1;`,
+        [finalUsername]
+      );
+      if (conflict.rows.length > 0) {
         return NextResponse.json({ error: "That username is already taken." }, { status: 409 });
       }
     }
 
-    await pool
-      .request()
-      .input("newUsername", sql.NVarChar(100), finalUsername)
-      .input("newPassword", sql.NVarChar(255), finalPasswordHash)
-      .input("adminId", sql.Int, admin.admin_id)
-      .query(`
-        UPDATE dbo.AdminUser
-        SET username = @newUsername, password = @newPassword
-        WHERE admin_id = @adminId;
-      `);
+    await query(
+      `UPDATE admin_user
+       SET username = $1, password = $2
+       WHERE admin_id = $3;`,
+      [finalUsername, finalPasswordHash, admin.admin_id]
+    );
 
     // Update auth cookie if username changed
     const response = NextResponse.json({

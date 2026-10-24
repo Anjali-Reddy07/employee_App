@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import sql from "mssql";
 import bcrypt from "bcryptjs";
-import { getSqlPool } from "@/app/lib/sql-server";
+import { query, initDb } from "@/app/lib/db";
 
 export const runtime = "nodejs";
 
@@ -27,19 +26,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const pool = await getSqlPool();
+    await initDb();
 
-    // Fetch admin record (password may be plain text or bcrypt hash)
-    const result = await pool
-      .request()
-      .input("username", sql.NVarChar(100), cleanUsername)
-      .query(`
-        SELECT admin_id, username, password
-        FROM dbo.AdminUser
-        WHERE username = @username;
-      `);
+    // Fetch admin record
+    const result = await query<{ admin_id: number; username: string; password: string }>(
+      `SELECT admin_id, username, password FROM admin_user WHERE username = $1;`,
+      [cleanUsername]
+    );
 
-    const user = result.recordset[0];
+    const user = result.rows[0];
 
     if (!user) {
       return NextResponse.json(
@@ -48,7 +43,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Support both bcrypt hashes ($2b$...) and legacy plain-text passwords
+    // Support both bcrypt hashes and legacy plain-text passwords
     const storedPassword: string = user.password;
     const isBcrypt = storedPassword.startsWith("$2b$") || storedPassword.startsWith("$2a$");
     let passwordMatch = false;
@@ -56,15 +51,14 @@ export async function POST(request: Request) {
     if (isBcrypt) {
       passwordMatch = await bcrypt.compare(cleanPassword, storedPassword);
     } else {
-      // Legacy plain-text match — then upgrade to hash in-place
+      // Legacy plain-text match — upgrade to hash in-place
       passwordMatch = storedPassword === cleanPassword;
       if (passwordMatch) {
         const hash = await bcrypt.hash(cleanPassword, 12);
-        await pool
-          .request()
-          .input("hash", sql.NVarChar(255), hash)
-          .input("username", sql.NVarChar(100), cleanUsername)
-          .query(`UPDATE dbo.AdminUser SET password = @hash WHERE username = @username;`);
+        await query(
+          `UPDATE admin_user SET password = $1 WHERE username = $2;`,
+          [hash, cleanUsername]
+        );
         console.log(`[Auth] Migrated plain-text password to bcrypt hash for user '${cleanUsername}'.`);
       }
     }
@@ -103,10 +97,10 @@ export async function POST(request: Request) {
     return response;
   } catch (error: unknown) {
     const err = error as { message?: string };
-    console.error("SQL Server admin authentication failed:", error);
+    console.error("Neon admin authentication failed:", error);
     return NextResponse.json(
       {
-        error: "Database error during authentication. Verify SQL Server is running.",
+        error: "Database error during authentication. Verify your DATABASE_URL is set correctly.",
         details: err?.message || String(error),
       },
       { status: 500 }
